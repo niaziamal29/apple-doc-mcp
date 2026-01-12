@@ -7,6 +7,7 @@ import {buildCurrentTechnologyHandler} from './handlers/current-technology.js';
 import {buildGetDocumentationHandler} from './handlers/get-documentation.js';
 import {buildSearchSymbolsHandler} from './handlers/search-symbols.js';
 import {buildVersionHandler} from './handlers/version.js';
+import {buildSuggestTechnologyStackHandler} from './handlers/suggest-technology-stack.js';
 
 type ToolDefinition = {
 	name: string;
@@ -115,6 +116,21 @@ export const registerTools = (server: Server, context: ServerContext) => {
 			handler: buildSearchSymbolsHandler(context),
 		},
 		{
+			name: 'suggest_technology_stack',
+			description: 'Suggest a technology stack based on an app description so an agent can plan an iOS implementation',
+			inputSchema: {
+				type: 'object',
+				required: ['description'],
+				properties: {
+					description: {
+						type: 'string',
+						description: 'Short description of the iOS app, including key features (notifications, sync, auth, maps, etc.)',
+					},
+				},
+			},
+			handler: buildSuggestTechnologyStackHandler(context),
+		},
+		{
 			name: 'get_version',
 			description: 'Get the current version information of the Apple Doc MCP server',
 			inputSchema: {
@@ -139,4 +155,3 @@ export const registerTools = (server: Server, context: ServerContext) => {
 		return tool.handler(request.params.arguments ?? {});
 	});
 };
-
