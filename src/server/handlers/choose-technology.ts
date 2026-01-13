@@ -37,7 +37,8 @@ const ensureFramework = (technology: {kind?: string; role?: string; title?: stri
 export const buildChooseTechnologyHandler = ({client, state}: ServerContext) =>
 	async (args: {name?: string; identifier?: string}): Promise<ToolResponse> => {
 		const {name, identifier} = args;
-		const technologies = await client.getTechnologies();
+		const provider = state.getProvider();
+		const technologies = await provider.getTechnologies();
 		const candidates = Object.values(technologies).filter(tech => typeof tech?.title === 'string' && typeof tech?.identifier === 'string');
 
 		// Normalize search terms - case insensitive
@@ -109,4 +110,3 @@ export const buildChooseTechnologyHandler = ({client, state}: ServerContext) =>
 			content: [{text: lines.join('\n'), type: 'text'}],
 		};
 	};
-

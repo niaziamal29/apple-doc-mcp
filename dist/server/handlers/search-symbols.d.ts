@@ -4,4 +4,5 @@ export declare const buildSearchSymbolsHandler: (context: ServerContext) => (arg
     platform?: string;
     query: string;
     symbolType?: string;
+    scope?: string;
 }) => Promise<ToolResponse>;

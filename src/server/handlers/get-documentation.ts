@@ -51,6 +51,7 @@ export const buildGetDocumentationHandler = (context: ServerContext) => {
 			return noTechnology();
 		}
 
+		const provider = state.getProvider();
 		const framework = await loadActiveFrameworkData(context);
 		const identifierParts = activeTechnology.identifier.split('/');
 		const frameworkName = identifierParts.at(-1);
@@ -61,7 +62,7 @@ export const buildGetDocumentationHandler = (context: ServerContext) => {
 
 		try {
 			// First attempt: try the path exactly as provided
-			data = await client.getSymbol(targetPath);
+			data = await provider.getSymbol(targetPath);
 		} catch (error) {
 			// If that fails and path doesn't already start with documentation/,
 			// try prefixing with framework path
@@ -71,7 +72,7 @@ export const buildGetDocumentationHandler = (context: ServerContext) => {
 			} else {
 				try {
 					targetPath = `documentation/${frameworkName}/${path}`;
-					data = await client.getSymbol(targetPath);
+					data = await provider.getSymbol(targetPath);
 				} catch {
 					// If both attempts fail, throw the original error with helpful context
 					throw new McpError(
@@ -105,4 +106,3 @@ export const buildGetDocumentationHandler = (context: ServerContext) => {
 		};
 	};
 };
-

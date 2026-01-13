@@ -38,7 +38,7 @@ export const loadActiveFrameworkData = async ({ client, state }) => {
     if (!frameworkName) {
         throw new McpError(ErrorCode.InvalidRequest, `Invalid technology identifier: ${activeTechnology.identifier}`);
     }
-    const data = await client.getFramework(frameworkName);
+    const data = await state.getProvider().getFramework(frameworkName);
     state.setActiveFrameworkData(data);
     state.clearFrameworkIndex();
     return data;
@@ -95,7 +95,7 @@ export const expandSymbolReferences = async (context, identifiers) => {
             const symbolPath = identifier
                 .replace('doc://com.apple.documentation/', '')
                 .replace(/^documentation\//, 'documentation/');
-            const data = await client.getSymbol(symbolPath);
+            const data = await state.getProvider().getSymbol(symbolPath);
             return { data, identifier };
         }
         catch (error) {

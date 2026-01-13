@@ -84,7 +84,7 @@ const resolveFrameworks = (
 	return results;
 };
 
-export const buildSuggestTechnologyStackHandler = ({client}: ServerContext) =>
+export const buildSuggestTechnologyStackHandler = ({client, state}: ServerContext) =>
 	async (args: {description?: string}): Promise<ToolResponse> => {
 		const description = args.description?.trim() ?? '';
 		if (!description) {
@@ -107,7 +107,7 @@ export const buildSuggestTechnologyStackHandler = ({client}: ServerContext) =>
 			};
 		}
 
-		const technologies = await client.getTechnologies();
+		const technologies = await state.getProvider().getTechnologies();
 		const availableTitles = new Map<string, string>();
 		for (const tech of Object.values(technologies)) {
 			if (tech.title) {

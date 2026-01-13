@@ -136,6 +136,27 @@ pnpm build
 - `search_symbols` – fuzzy keyword search with wildcard support within the active framework.
 - `get_documentation` – view symbol docs (relative names allowed).
 - `get_version` – get current MCP server version information.
+- `index_status` – show cache/index coverage and telemetry stats.
+- `provider_status` – list documentation providers.
+- `set_provider` – switch the active provider (default: apple).
+- `provider_health_all` – check provider health across all providers.
+- `service_status` – summarize provider health, cache size, and telemetry.
+- `api_health` – check provider API latency/status.
+- `search_semantic` – semantic search across cached symbols.
+- `search_multi_framework` – run searches across multiple frameworks.
+- `plan_query` – produce a suggested MCP workflow from a natural language request.
+- `list_bundles` – list offline cache bundles.
+- `export_bundle` – export cached docs into a bundle.
+- `import_bundle` – import cached docs from a bundle.
+- `cache_diff` – show cache entries updated since a timestamp.
+- `refresh_technologies` – force refresh the provider’s technologies list.
+- `refresh_framework` – force refresh the active framework cache.
+- `next_steps` – suggest next actions based on current state.
+- `workflow_suggestions` – suggest frameworks for common workflows.
+- `explain_search` – explain why a symbol matched a query.
+- `extract_snippets` – extract code snippets from symbol docs.
+- `clear_cache` – clear cached docs and reset indexes.
+- `suggest_technology_stack` – suggest an iOS tech stack from an app description.
 
 ## 🚀 Advanced Features
 
@@ -160,3 +181,34 @@ pnpm build
 - **No Background Downloads**: Comprehensive symbol downloader is currently disabled due to stability issues
 - **Framework-Specific**: Each technology maintains its own cache and index
 - **Cache Dependency**: Search quality depends on available cached framework data
+
+## 🔌 Integration Examples
+
+### MCP client config (npx)
+```json
+{
+  "mcpServers": {
+    "apple-docs": {
+      "command": "npx",
+      "args": ["apple-doc-mcp-server@latest"]
+    }
+  }
+}
+```
+
+### MCP client config (local build)
+```json
+{
+  "mcpServers": {
+    "apple-docs": {
+      "command": "node",
+      "args": ["/absolute/path/to/apple-doc-mcp/dist/index.js"]
+    }
+  }
+}
+```
+
+### Example starter prompt
+```
+Use the apple-docs MCP server. Discover the best Apple framework for building an iOS onboarding flow with camera access and local notifications. Then select the framework, search for relevant APIs, and open the top 3 documentation pages with short summaries.
+```

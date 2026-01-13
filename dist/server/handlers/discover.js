@@ -15,7 +15,8 @@ const formatPagination = (query, currentPage, totalPages) => {
 };
 export const buildDiscoverHandler = ({ client, state }) => async (args) => {
     const { query, page = 1, pageSize = 25 } = args;
-    const technologies = await client.getTechnologies();
+    const provider = state.getProvider();
+    const technologies = await provider.getTechnologies();
     const frameworks = Object.values(technologies).filter(tech => tech.kind === 'symbol' && tech.role === 'collection');
     let filtered = frameworks;
     if (query) {
