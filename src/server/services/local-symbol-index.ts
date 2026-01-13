@@ -1,9 +1,4 @@
-import {
-	readFileSync,
-	existsSync,
-	readdirSync,
-	unlinkSync,
-} from 'node:fs';
+import {promises as fs, readFileSync, existsSync, readdirSync, unlinkSync} from 'node:fs';
 import {join, dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {Buffer} from 'node:buffer';
@@ -77,12 +72,14 @@ export class LocalSymbolIndex {
 		for (const file of files) {
 			const filePath = join(this.cacheDir, file);
 			try {
-				if (!this.validateIntegrity(filePath, file)) {
+				// eslint-disable-next-line no-await-in-loop
+				if (!await this.validateIntegrity(filePath, file)) {
 					errorCount++;
 					continue;
 				}
 
-				const rawData = readFileSync(filePath, 'utf8');
+				// eslint-disable-next-line no-await-in-loop
+				const rawData = await fs.readFile(filePath, 'utf8');
 				const data = JSON.parse(rawData) as SymbolData | FrameworkData;
 
 				// Validate data structure
@@ -119,12 +116,14 @@ export class LocalSymbolIndex {
 			}
 
 			const filePath = join(this.cacheDir, file);
-			if (!this.validateIntegrity(filePath, file)) {
+			// eslint-disable-next-line no-await-in-loop
+			if (!await this.validateIntegrity(filePath, file)) {
 				continue;
 			}
 
 			try {
-				const rawData = readFileSync(filePath, 'utf8');
+				// eslint-disable-next-line no-await-in-loop
+				const rawData = await fs.readFile(filePath, 'utf8');
 				const data = JSON.parse(rawData) as SymbolData | FrameworkData;
 				if (!this.isValidCacheData(data)) {
 					continue;
@@ -146,38 +145,7 @@ export class LocalSymbolIndex {
 		const hasWildcards = query.includes('*') || query.includes('?');
 
 		for (const [id, entry] of this.symbols.entries()) {
-			let score = 0;
-
-			if (hasWildcards) {
-				// Wildcard matching
-				const pattern = query
-					.replaceAll('*', '.*')
-					.replaceAll('?', '.')
-					.toLowerCase();
-
-				const regex = new RegExp(`^${pattern}$`);
-
-				if (regex.test(entry.title.toLowerCase())
-					|| regex.test(entry.path.toLowerCase())
-					|| entry.tokens.some(token => regex.test(token))) {
-					score = 100; // High score for wildcard matches
-				}
-			} else {
-				// Regular token-based matching
-				for (const queryToken of queryTokens) {
-					if (entry.title.toLowerCase().includes(queryToken.toLowerCase())) {
-						score += 50;
-					}
-
-					if (entry.tokens.includes(queryToken)) {
-						score += 30;
-					}
-
-					if (entry.abstract.toLowerCase().includes(queryToken.toLowerCase())) {
-						score += 10;
-					}
-				}
-			}
+			const score = this.scoreEntry(entry, queryTokens, query, hasWildcards);
 
 			if (score > 0) {
 				results.push({entry, score});
@@ -202,6 +170,23 @@ export class LocalSymbolIndex {
 
 	ingestSymbolData(data: SymbolData | FrameworkData, filePath = ''): void {
 		this.processSymbolData(data, filePath);
+	}
+
+	findEntry(query: string): LocalSymbolIndexEntry | undefined {
+		if (this.symbols.has(query)) {
+			return this.symbols.get(query);
+		}
+
+		return [...this.symbols.values()].find(entry =>
+			entry.title.toLowerCase() === query.toLowerCase()
+			|| entry.path.toLowerCase() === query.toLowerCase());
+	}
+
+	explainMatch(query: string, entry: LocalSymbolIndexEntry): {score: number; tokens: string[]} {
+		const queryTokens = this.expandTokens(this.tokenize(query));
+		const hasWildcards = query.includes('*') || query.includes('?');
+		const score = this.scoreEntry(entry, queryTokens, query, hasWildcards);
+		return {score, tokens: queryTokens};
 	}
 
 	private isValidCacheData(data: unknown): data is SymbolData | FrameworkData {
@@ -258,6 +243,41 @@ export class LocalSymbolIndex {
 		return [...tokens];
 	}
 
+	private scoreEntry(entry: LocalSymbolIndexEntry, queryTokens: string[], query: string, hasWildcards: boolean): number {
+		if (hasWildcards) {
+			const pattern = query
+				.replaceAll('*', '.*')
+				.replaceAll('?', '.')
+				.toLowerCase();
+
+			const regex = new RegExp(`^${pattern}$`);
+			if (regex.test(entry.title.toLowerCase())
+				|| regex.test(entry.path.toLowerCase())
+				|| entry.tokens.some(token => regex.test(token))) {
+				return 100;
+			}
+
+			return 0;
+		}
+
+		let score = 0;
+		for (const queryToken of queryTokens) {
+			if (entry.title.toLowerCase().includes(queryToken.toLowerCase())) {
+				score += 50;
+			}
+
+			if (entry.tokens.includes(queryToken)) {
+				score += 30;
+			}
+
+			if (entry.abstract.toLowerCase().includes(queryToken.toLowerCase())) {
+				score += 10;
+			}
+		}
+
+		return score;
+	}
+
 	private expandTokens(tokens: string[]): string[] {
 		const expanded = new Set<string>(tokens.map(token => token.toLowerCase()));
 		for (const token of tokens) {
@@ -306,14 +326,14 @@ export class LocalSymbolIndex {
 		this.processReferences(data.references, filePath);
 	}
 
-	private validateIntegrity(filePath: string, fileName: string): boolean {
-		const rawData = readFileSync(filePath, 'utf8');
+	private async validateIntegrity(filePath: string, fileName: string): Promise<boolean> {
+		const rawData = await fs.readFile(filePath, 'utf8');
 		const hash = CacheIndex.createHash(rawData);
 		const entry = this.cacheIndex.getEntry(fileName);
 		if (entry && entry.hash !== hash) {
 			console.warn(`Cache hash mismatch for ${fileName}, skipping`);
 			try {
-				unlinkSync(filePath);
+				await fs.unlink(filePath);
 			} catch (error) {
 				if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') {
 					console.warn(`Failed to remove corrupt cache file ${fileName}:`, error instanceof Error ? error.message : String(error));
@@ -340,7 +360,7 @@ export class LocalSymbolIndex {
 			});
 		}
 
-		void this.cacheIndex.persist();
+		await this.cacheIndex.persist();
 		return true;
 	}
 

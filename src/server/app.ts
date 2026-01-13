@@ -29,7 +29,9 @@ export const createServer = () => {
 	);
 
 	const client = new AppleDevDocsClient();
-	const state = new ServerState();
+	const providerRegistry = new ProviderRegistry();
+	providerRegistry.register(new AppleDocProvider(client));
+	const state = new ServerState(providerRegistry);
 
 	registerTools(server, {client, state});
 	void prefetchCoreFrameworks(client);

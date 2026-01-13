@@ -5,6 +5,7 @@ import {LocalSymbolIndex} from './services/local-symbol-index.js';
 import {ComprehensiveSymbolDownloader} from './services/comprehensive-symbol-downloader.js';
 import {Telemetry} from './services/telemetry.js';
 import {GlobalSymbolIndex} from './services/global-symbol-index.js';
+import type {ProviderRegistry, DocProvider} from './services/doc-provider.js';
 
 export type LastDiscovery = {
 	query?: string;
@@ -28,6 +29,11 @@ export class ServerState {
 	private comprehensiveDownloadPromise?: Promise<void>;
 	private telemetry?: Telemetry;
 	private globalSymbolIndex?: GlobalSymbolIndex;
+	private activeProviderName: string;
+
+	constructor(private readonly providerRegistry: ProviderRegistry, activeProviderName = 'apple') {
+		this.activeProviderName = activeProviderName;
+	}
 
 	getActiveTechnology(): Technology | undefined {
 		return this.activeTechnology;
@@ -111,6 +117,31 @@ export class ServerState {
 		this.globalSymbolIndex = undefined;
 	}
 
+	getProvider(): DocProvider {
+		const provider = this.providerRegistry.get(this.activeProviderName);
+		if (!provider) {
+			throw new Error(`Unknown provider: ${this.activeProviderName}`);
+		}
+
+		return provider;
+	}
+
+	listProviders(): string[] {
+		return this.providerRegistry.list();
+	}
+
+	getProviders(): DocProvider[] {
+		return this.providerRegistry.entries();
+	}
+
+	setProvider(name: string) {
+		if (!this.providerRegistry.get(name)) {
+			throw new Error(`Unknown provider: ${name}`);
+		}
+
+		this.activeProviderName = name;
+	}
+
 	getComprehensiveDownloader(client: AppleDevDocsClient): ComprehensiveSymbolDownloader {
 		this.comprehensiveDownloader ??= new ComprehensiveSymbolDownloader(client);
 
@@ -125,6 +156,8 @@ export class ServerState {
 		this.comprehensiveDownloadPromise = (async () => {
 			try {
 				await promise;
+			} catch (error) {
+				console.error('Comprehensive download failed:', error instanceof Error ? error.message : String(error));
 			} finally {
 				this.comprehensiveDownloadPromise = undefined;
 			}

@@ -34,6 +34,10 @@ export class AppleDevDocsClient {
 		this.httpClient.clearCache();
 	}
 
+	async checkHealth(): Promise<{ok: boolean; latencyMs: number; message?: string}> {
+		return this.httpClient.checkHealth();
+	}
+
 	async getFramework(frameworkName: string): Promise<FrameworkData> {
 		const cached = await this.fileCache.loadFramework(frameworkName);
 		if (cached) {

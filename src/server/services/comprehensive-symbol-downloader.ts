@@ -289,3 +289,4 @@ export class ComprehensiveSymbolDownloader {
 		return identifier;
 	}
 }
+/* eslint-enable max-depth */
