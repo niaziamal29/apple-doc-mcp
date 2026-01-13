@@ -7,6 +7,9 @@ import {buildCurrentTechnologyHandler} from './handlers/current-technology.js';
 import {buildGetDocumentationHandler} from './handlers/get-documentation.js';
 import {buildSearchSymbolsHandler} from './handlers/search-symbols.js';
 import {buildVersionHandler} from './handlers/version.js';
+import {buildSuggestTechnologyStackHandler} from './handlers/suggest-technology-stack.js';
+import {buildIndexStatusHandler} from './handlers/index-status.js';
+import {buildClearCacheHandler} from './handlers/clear-cache.js';
 
 type ToolDefinition = {
 	name: string;
@@ -15,6 +18,7 @@ type ToolDefinition = {
 	handler: (args: any) => Promise<{content: Array<{text: string; type: 'text'}>}>;
 };
 
+// eslint-disable-next-line @typescript-eslint/no-deprecated
 export const registerTools = (server: Server, context: ServerContext) => {
 	const toolDefinitions: ToolDefinition[] = [
 		{
@@ -106,6 +110,10 @@ export const registerTools = (server: Server, context: ServerContext) => {
 						type: 'string',
 						description: 'Search keywords with wildcard support (* for any characters, ? for single character)',
 					},
+					scope: {
+						type: 'string',
+						description: 'Optional scope: "technology" (default) or "global" to search all cached frameworks',
+					},
 					symbolType: {
 						type: 'string',
 						description: 'Optional symbol kind filter (class, protocol, etc.)',
@@ -113,6 +121,41 @@ export const registerTools = (server: Server, context: ServerContext) => {
 				},
 			},
 			handler: buildSearchSymbolsHandler(context),
+		},
+		{
+			name: 'index_status',
+			description: 'Report cache and symbol index coverage, plus telemetry metrics if enabled',
+			inputSchema: {
+				type: 'object',
+				required: [],
+				properties: {},
+			},
+			handler: buildIndexStatusHandler(context),
+		},
+		{
+			name: 'clear_cache',
+			description: 'Clear cached documentation and reset local/global indexes',
+			inputSchema: {
+				type: 'object',
+				required: [],
+				properties: {},
+			},
+			handler: buildClearCacheHandler(context),
+		},
+		{
+			name: 'suggest_technology_stack',
+			description: 'Suggest a technology stack based on an app description so an agent can plan an iOS implementation',
+			inputSchema: {
+				type: 'object',
+				required: ['description'],
+				properties: {
+					description: {
+						type: 'string',
+						description: 'Short description of the iOS app, including key features (notifications, sync, auth, maps, etc.)',
+					},
+				},
+			},
+			handler: buildSuggestTechnologyStackHandler(context),
 		},
 		{
 			name: 'get_version',
@@ -139,4 +182,3 @@ export const registerTools = (server: Server, context: ServerContext) => {
 		return tool.handler(request.params.arguments ?? {});
 	});
 };
-
