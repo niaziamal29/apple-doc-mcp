@@ -1,6 +1,4 @@
-import {
-	readFileSync, writeFileSync, existsSync, mkdirSync,
-} from 'node:fs';
+import {promises as fs} from 'node:fs';
 import {join, dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {ErrorCode, McpError} from '@modelcontextprotocol/sdk/types.js';
@@ -24,6 +22,10 @@ export type SymbolIndexEntry = {
 
 export class ComprehensiveSymbolDownloader {
 	private readonly downloadedSymbols = new Set<string>();
+	private readonly pendingSymbols: string[] = [];
+	private statePath = '';
+	private running = false;
+	private activeTechnologyIdentifier?: string;
 
 	constructor(private readonly client: AppleDevDocsClient) {}
 
@@ -35,6 +37,10 @@ export class ComprehensiveSymbolDownloader {
 		return 3;
 	}
 
+	private get maxConcurrency(): number {
+		return 5;
+	}
+
 	getDownloadedCount(): number {
 		return this.downloadedSymbols.size;
 	}
@@ -43,7 +49,19 @@ export class ComprehensiveSymbolDownloader {
 		return [...this.downloadedSymbols];
 	}
 
-	async downloadAllSymbols(context: ServerContext): Promise<void> {
+	queuePriorityPaths(paths: string[]): void {
+		const normalized = paths.map(path => this.normalizeIdentifier(path));
+		for (const path of normalized.reverse()) {
+			if (!this.downloadedSymbols.has(path) && !this.pendingSymbols.includes(path)) {
+				this.pendingSymbols.unshift(path);
+			}
+		}
+	}
+
+	async downloadAllSymbols(
+		context: ServerContext,
+		onSymbolDownloaded?: (data: SymbolData | FrameworkData) => void,
+	): Promise<void> {
 		const {state} = context;
 		const activeTechnology = state.getActiveTechnology();
 
@@ -57,15 +75,21 @@ export class ComprehensiveSymbolDownloader {
 		console.error(`🚀 Starting comprehensive symbol download for ${activeTechnology.title}`);
 		console.error('⏳ This will download additional symbols to improve search results...');
 
-		// Load main framework data
-		const frameworkData = await this.client.getFramework(activeTechnology.title);
+		this.activeTechnologyIdentifier = activeTechnology.identifier;
+		await this.loadState(activeTechnology.identifier);
 
-		// Extract all identifiers from main framework
-		const initialIdentifiers = this.extractAllIdentifiers(frameworkData);
-		console.error(`📋 Found ${initialIdentifiers.length} initial identifiers to process`);
+		if (this.pendingSymbols.length === 0) {
+			// Load main framework data
+			const frameworkData = await this.client.getFramework(activeTechnology.title);
+			onSymbolDownloaded?.(frameworkData);
 
-		// Start recursive download
-		await this.downloadSymbolsRecursively(initialIdentifiers);
+			// Extract all identifiers from main framework
+			const initialIdentifiers = this.extractAllIdentifiers(frameworkData);
+			console.error(`📋 Found ${initialIdentifiers.length} initial identifiers to process`);
+			this.queueIdentifiers(initialIdentifiers);
+		}
+
+		await this.downloadSymbolsRecursively(onSymbolDownloaded);
 
 		console.error(`✅ Download completed! Total symbols downloaded: ${this.downloadedSymbols.size}`);
 	}
@@ -102,9 +126,7 @@ export class ComprehensiveSymbolDownloader {
 
 	private async downloadSymbolWithRetry(identifier: string, attempt = 1): Promise<SymbolData | undefined> {
 		try {
-			const symbolPath = identifier
-				.replace('doc://com.apple.documentation/', '')
-				.replace(/^documentation\//, 'documentation/');
+			const symbolPath = this.normalizeIdentifier(identifier);
 
 			const data = await this.client.getSymbol(symbolPath);
 			return data;
@@ -122,48 +144,148 @@ export class ComprehensiveSymbolDownloader {
 		}
 	}
 
-	private async downloadSymbolsRecursively(identifiers: string[], depth = 0): Promise<void> {
-		const newIdentifiers: string[] = [];
-		const totalToProcess = identifiers.length;
-		let processed = 0;
+	private async downloadSymbolsRecursively(
+		onSymbolDownloaded?: (data: SymbolData | FrameworkData) => void,
+		depth = 0,
+	): Promise<void> {
+		if (this.running) {
+			console.error('⏳ Comprehensive download already running, skipping');
+			return;
+		}
 
-		console.error(`📥 Processing ${totalToProcess} symbols (depth ${depth})...`);
+		this.running = true;
+		try {
+			while (this.pendingSymbols.length > 0 && depth < 4) {
+				const batch = this.pendingSymbols.splice(0, this.maxConcurrency);
+				let processed = 0;
+				const totalToProcess = batch.length;
 
-		const promises = identifiers.map(async identifier => {
-			if (this.downloadedSymbols.has(identifier)) {
-				return; // Already downloaded
-			}
+				console.error(`📥 Processing ${totalToProcess} symbols (depth ${depth})...`);
 
-			processed++;
-			if (processed % 10 === 0 || processed === totalToProcess) {
-				console.error(`📥 Progress: ${processed}/${totalToProcess} symbols processed (${this.downloadedSymbols.size} total downloaded)`);
-			}
+				// eslint-disable-next-line no-await-in-loop
+				const results = await Promise.all(batch.map(async identifier => {
+					if (this.downloadedSymbols.has(identifier)) {
+						return undefined;
+					}
 
-			// Rate limiting
-			await this.delay(this.rateLimitDelay);
+					processed++;
+					if (processed % 5 === 0 || processed === totalToProcess) {
+						console.error(`📥 Progress: ${processed}/${totalToProcess} symbols processed (${this.downloadedSymbols.size} total downloaded)`);
+					}
 
-			const data = await this.downloadSymbolWithRetry(identifier);
-			if (data) {
-				this.downloadedSymbols.add(identifier);
+					await this.delay(this.rateLimitDelay);
+					const data = await this.downloadSymbolWithRetry(identifier);
+					if (data) {
+						this.downloadedSymbols.add(identifier);
+						onSymbolDownloaded?.(data);
+						return data;
+					}
 
-				// Extract new identifiers from this symbol
-				const newIds = this.extractAllIdentifiers(data);
-				for (const newId of newIds) {
-					if (!this.downloadedSymbols.has(newId)) {
-						newIdentifiers.push(newId);
+					return undefined;
+				}));
+
+				const newIdentifiers: string[] = [];
+				for (const data of results) {
+					if (!data) {
+						continue;
+					}
+
+					for (const newId of this.extractAllIdentifiers(data)) {
+						if (!this.downloadedSymbols.has(newId)) {
+							newIdentifiers.push(newId);
+						}
 					}
 				}
+
+				if (newIdentifiers.length > 0) {
+					console.error(`🔍 Found ${newIdentifiers.length} new identifiers to download (depth ${depth + 1})`);
+					this.queueIdentifiers(newIdentifiers);
+					depth += 1;
+				}
+
+				// eslint-disable-next-line no-await-in-loop
+				await this.persistState();
 			}
-		});
 
-		await Promise.all(promises);
-
-		// Recursively download new identifiers (with depth limit to prevent infinite recursion)
-		if (newIdentifiers.length > 0 && depth < 3) {
-			console.error(`🔍 Found ${newIdentifiers.length} new identifiers to download (depth ${depth + 1})`);
-			await this.downloadSymbolsRecursively(newIdentifiers, depth + 1);
-		} else if (newIdentifiers.length > 0) {
-			console.error(`⚠️ Stopping recursion at depth ${depth} to prevent infinite loops`);
+			if (this.pendingSymbols.length > 0) {
+				console.error(`⚠️ Pausing recursion at depth ${depth} to prevent runaway downloads`);
+			}
+		} finally {
+			this.running = false;
+			await this.persistState();
 		}
+	}
+
+	private queueIdentifiers(identifiers: string[]): void {
+		for (const id of identifiers) {
+			const normalized = this.normalizeIdentifier(id);
+			if (!this.downloadedSymbols.has(normalized) && !this.pendingSymbols.includes(normalized)) {
+				this.pendingSymbols.push(normalized);
+			}
+		}
+	}
+
+	private async loadState(technologyIdentifier: string): Promise<void> {
+		this.activeTechnologyIdentifier = technologyIdentifier;
+		this.statePath = join(__dirname, '../../../.cache/comprehensive-download-state.json');
+		this.downloadedSymbols.clear();
+		this.pendingSymbols.splice(0);
+
+		try {
+			const raw = await fs.readFile(this.statePath, 'utf8');
+			const parsed = JSON.parse(raw) as {
+				technologyIdentifier?: string;
+				pending?: string[];
+				completed?: string[];
+			};
+
+			if (parsed.technologyIdentifier === technologyIdentifier) {
+				for (const id of parsed.completed ?? []) {
+					this.downloadedSymbols.add(id);
+				}
+
+				this.pendingSymbols.push(...(parsed.pending ?? []));
+			}
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+				console.warn('Failed to load download state:', error instanceof Error ? error.message : String(error));
+			}
+		}
+	}
+
+	private async persistState(): Promise<void> {
+		if (!this.activeTechnologyIdentifier) {
+			return;
+		}
+
+		const payload = {
+			technologyIdentifier: this.activeTechnologyIdentifier,
+			pending: this.pendingSymbols,
+			completed: [...this.downloadedSymbols],
+			updatedAt: new Date().toISOString(),
+		};
+
+		try {
+			await fs.mkdir(join(__dirname, '../../../.cache'), {recursive: true});
+			await fs.writeFile(this.statePath, JSON.stringify(payload, null, 2));
+		} catch (error) {
+			console.warn('Failed to persist download state:', error instanceof Error ? error.message : String(error));
+		}
+	}
+
+	private normalizeIdentifier(identifier: string): string {
+		if (identifier.startsWith('documentation/')) {
+			return identifier;
+		}
+
+		if (identifier.startsWith('doc://com.apple.documentation/')) {
+			return identifier.replace('doc://com.apple.documentation/', '').replace(/^documentation\//, 'documentation/');
+		}
+
+		if (identifier.includes('/')) {
+			return identifier.replace(/^\/+/, '');
+		}
+
+		return identifier;
 	}
 }

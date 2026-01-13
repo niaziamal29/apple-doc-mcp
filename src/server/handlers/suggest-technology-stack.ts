@@ -1,5 +1,10 @@
 import type {ServerContext, ToolResponse} from '../context.js';
-import {bold, header, list, paragraph} from '../markdown.js';
+import {
+	bold,
+	header,
+	list,
+	paragraph,
+} from '../markdown.js';
 
 const featureToFrameworks: Record<string, string[]> = {
 	ui: ['SwiftUI', 'UIKit'],
@@ -29,7 +34,7 @@ const featureToFrameworks: Record<string, string[]> = {
 	widgets: ['WidgetKit'],
 };
 
-const normalize = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]+/g, '');
+const normalize = (value: string): string => value.toLowerCase().replaceAll(/[^a-z\d]+/g, '');
 
 const tokenize = (value: string): string[] => value
 	.toLowerCase()
