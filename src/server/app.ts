@@ -5,6 +5,7 @@ import {Server} from '@modelcontextprotocol/sdk/server/index.js';
 import {AppleDevDocsClient} from '../apple-client.js';
 import {ServerState} from './state.js';
 import {registerTools} from './tools.js';
+import {prefetchCoreFrameworks} from './services/prefetch.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -14,6 +15,7 @@ const packageJsonPath = join(__dirname, '../../package.json');
 const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as {version: string};
 
 export const createServer = () => {
+	// eslint-disable-next-line @typescript-eslint/no-deprecated
 	const server = new Server(
 		{
 			name: 'apple-dev-docs-mcp',
@@ -30,7 +32,7 @@ export const createServer = () => {
 	const state = new ServerState();
 
 	registerTools(server, {client, state});
+	void prefetchCoreFrameworks(client);
 
 	return server;
 };
-

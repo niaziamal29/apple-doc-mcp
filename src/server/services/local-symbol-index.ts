@@ -1,9 +1,19 @@
-import {readFileSync, existsSync, readdirSync} from 'node:fs';
+import {
+	readFileSync,
+	existsSync,
+	readdirSync,
+	unlinkSync,
+} from 'node:fs';
 import {join, dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {
-	type AppleDevDocsClient, type SymbolData, type ReferenceData, type FrameworkData,
+import {Buffer} from 'node:buffer';
+import type {
+	AppleDevDocsClient,
+	SymbolData,
+	ReferenceData,
+	FrameworkData,
 } from '../../apple-client.js';
+import {CacheIndex} from '../../apple-client/cache/cache-index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -24,10 +34,21 @@ export class LocalSymbolIndex {
 	private readonly cacheDir: string;
 	private readonly technologyIdentifier?: string;
 	private indexBuilt = false;
+	private readonly processedFiles = new Set<string>();
+	private readonly cacheIndex: CacheIndex;
+	private readonly synonyms: Record<string, string[]> = {
+		auth: ['authentication', 'authorize', 'oauth', 'signin'],
+		notification: ['push', 'alert'],
+		tabbar: ['tab', 'tabs'],
+		modal: ['sheet', 'dialog'],
+		db: ['database', 'storage'],
+		net: ['network', 'networking'],
+	};
 
 	constructor(private readonly client: AppleDevDocsClient, technologyIdentifier?: string) {
 		this.cacheDir = join(__dirname, '../../../.cache');
 		this.technologyIdentifier = technologyIdentifier;
+		this.cacheIndex = new CacheIndex(this.cacheDir);
 	}
 
 	async buildIndexFromCache(): Promise<void> {
@@ -37,6 +58,7 @@ export class LocalSymbolIndex {
 		}
 
 		console.error('📚 Building local symbol index from cached files...');
+		await this.cacheIndex.load();
 
 		// Validate cache directory exists
 		if (!existsSync(this.cacheDir)) {
@@ -55,6 +77,11 @@ export class LocalSymbolIndex {
 		for (const file of files) {
 			const filePath = join(this.cacheDir, file);
 			try {
+				if (!this.validateIntegrity(filePath, file)) {
+					errorCount++;
+					continue;
+				}
+
 				const rawData = readFileSync(filePath, 'utf8');
 				const data = JSON.parse(rawData) as SymbolData | FrameworkData;
 
@@ -67,6 +94,7 @@ export class LocalSymbolIndex {
 
 				// Process the data
 				this.processSymbolData(data, filePath);
+				this.processedFiles.add(file);
 				processedCount++;
 			} catch (error) {
 				console.warn(`Failed to process ${file}:`, error instanceof Error ? error.message : String(error));
@@ -78,9 +106,41 @@ export class LocalSymbolIndex {
 		console.error(`✅ Local symbol index built with ${this.symbols.size} symbols (${processedCount} files processed, ${errorCount} errors)`);
 	}
 
+	async refreshFromCache(): Promise<void> {
+		await this.cacheIndex.load();
+		if (!existsSync(this.cacheDir)) {
+			return;
+		}
+
+		const files = readdirSync(this.cacheDir).filter(file => file.endsWith('.json'));
+		for (const file of files) {
+			if (this.processedFiles.has(file)) {
+				continue;
+			}
+
+			const filePath = join(this.cacheDir, file);
+			if (!this.validateIntegrity(filePath, file)) {
+				continue;
+			}
+
+			try {
+				const rawData = readFileSync(filePath, 'utf8');
+				const data = JSON.parse(rawData) as SymbolData | FrameworkData;
+				if (!this.isValidCacheData(data)) {
+					continue;
+				}
+
+				this.processSymbolData(data, filePath);
+				this.processedFiles.add(file);
+			} catch (error) {
+				console.warn(`Failed to refresh ${file}:`, error instanceof Error ? error.message : String(error));
+			}
+		}
+	}
+
 	search(query: string, maxResults = 20): LocalSymbolIndexEntry[] {
 		const results: Array<{entry: LocalSymbolIndexEntry; score: number}> = [];
-		const queryTokens = this.tokenize(query);
+		const queryTokens = this.expandTokens(this.tokenize(query));
 
 		// Check if query contains wildcards
 		const hasWildcards = query.includes('*') || query.includes('?');
@@ -137,6 +197,11 @@ export class LocalSymbolIndex {
 	clear(): void {
 		this.symbols.clear();
 		this.indexBuilt = false;
+		this.processedFiles.clear();
+	}
+
+	ingestSymbolData(data: SymbolData | FrameworkData, filePath = ''): void {
+		this.processSymbolData(data, filePath);
 	}
 
 	private isValidCacheData(data: unknown): data is SymbolData | FrameworkData {
@@ -193,6 +258,18 @@ export class LocalSymbolIndex {
 		return [...tokens];
 	}
 
+	private expandTokens(tokens: string[]): string[] {
+		const expanded = new Set<string>(tokens.map(token => token.toLowerCase()));
+		for (const token of tokens) {
+			const normalized = token.toLowerCase();
+			for (const synonym of this.synonyms[normalized] ?? []) {
+				expanded.add(synonym.toLowerCase());
+			}
+		}
+
+		return [...expanded];
+	}
+
 	private processSymbolData(data: SymbolData | FrameworkData, filePath: string): void {
 		const title = data.metadata?.title || 'Unknown';
 		const path = (data.metadata && 'url' in data.metadata && typeof data.metadata.url === 'string') ? data.metadata.url : '';
@@ -227,6 +304,44 @@ export class LocalSymbolIndex {
 
 		// Process references recursively
 		this.processReferences(data.references, filePath);
+	}
+
+	private validateIntegrity(filePath: string, fileName: string): boolean {
+		const rawData = readFileSync(filePath, 'utf8');
+		const hash = CacheIndex.createHash(rawData);
+		const entry = this.cacheIndex.getEntry(fileName);
+		if (entry && entry.hash !== hash) {
+			console.warn(`Cache hash mismatch for ${fileName}, skipping`);
+			try {
+				unlinkSync(filePath);
+			} catch (error) {
+				if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+					console.warn(`Failed to remove corrupt cache file ${fileName}:`, error instanceof Error ? error.message : String(error));
+				}
+			}
+
+			this.cacheIndex.removeEntry(fileName);
+			return false;
+		}
+
+		if (entry) {
+			this.cacheIndex.setEntry({
+				...entry,
+				lastAccessedAt: new Date().toISOString(),
+			});
+		} else {
+			const now = new Date().toISOString();
+			this.cacheIndex.setEntry({
+				fileName,
+				bytes: Buffer.byteLength(rawData),
+				hash,
+				lastAccessedAt: now,
+				updatedAt: now,
+			});
+		}
+
+		void this.cacheIndex.persist();
+		return true;
 	}
 
 	private createTokens(title: string, abstract: string, path: string, platforms: string[]): string[] {
