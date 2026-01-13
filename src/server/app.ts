@@ -6,6 +6,7 @@ import {AppleDevDocsClient} from '../apple-client.js';
 import {ServerState} from './state.js';
 import {registerTools} from './tools.js';
 import {prefetchCoreFrameworks} from './services/prefetch.js';
+import {AppleDocProvider, ProviderRegistry} from './services/doc-provider.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -29,7 +30,9 @@ export const createServer = () => {
 	);
 
 	const client = new AppleDevDocsClient();
-	const state = new ServerState();
+	const providerRegistry = new ProviderRegistry();
+	providerRegistry.register(new AppleDocProvider(client));
+	const state = new ServerState(providerRegistry);
 
 	registerTools(server, {client, state});
 	void prefetchCoreFrameworks(client);

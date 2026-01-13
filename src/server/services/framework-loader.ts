@@ -58,7 +58,7 @@ export const loadActiveFrameworkData = async ({client, state}: ServerContext): P
 		);
 	}
 
-	const data = await client.getFramework(frameworkName);
+	const data = await state.getProvider().getFramework(frameworkName);
 	state.setActiveFrameworkData(data);
 	state.clearFrameworkIndex();
 	return data;
@@ -143,7 +143,7 @@ export const expandSymbolReferences = async (
 			const symbolPath = identifier
 				.replace('doc://com.apple.documentation/', '')
 				.replace(/^documentation\//, 'documentation/');
-			const data: SymbolData = await client.getSymbol(symbolPath);
+			const data: SymbolData = await state.getProvider().getSymbol(symbolPath);
 			return {data, identifier};
 		} catch (error) {
 			console.warn(`Failed to expand identifier ${identifier}:`, error instanceof Error ? error.message : String(error));
@@ -167,4 +167,3 @@ export const getFrameworkIndexEntries = async (context: ServerContext) => {
 	const index = await ensureFrameworkIndex(context);
 	return [...index.values()];
 };
-
