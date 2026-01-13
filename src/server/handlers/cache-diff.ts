@@ -12,6 +12,17 @@ export const buildCacheDiffHandler = () =>
 		const since = args.since
 			? new Date(args.since)
 			: new Date(Date.now() - (24 * 60 * 60 * 1000));
+
+		if (args.since && Number.isNaN(since.getTime())) {
+			const errorLines = [
+				header(1, '🧾 Cache Diff'),
+				'',
+				bold('Error', `Invalid "since" date: ${args.since}`),
+			];
+
+			return {content: [{type: 'text', text: errorLines.join('\n')}]};
+		}
+
 		const cacheDir = join(__dirname, '../../../.cache');
 		const cacheIndex = new CacheIndex(cacheDir);
 		await cacheIndex.load();
@@ -26,7 +37,7 @@ export const buildCacheDiffHandler = () =>
 			bold('Since', since.toISOString()),
 			bold('Entries', entries.length.toString()),
 			'',
-			list(entries.map(entry => `• ${entry}`)),
+			list(entries),
 		];
 
 		return {content: [{type: 'text', text: lines.join('\n')}]};

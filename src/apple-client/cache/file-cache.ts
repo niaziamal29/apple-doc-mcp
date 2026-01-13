@@ -1,5 +1,5 @@
 import {promises as fs} from 'node:fs';
-import {join, dirname} from 'node:path';
+import {join, dirname, basename} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {Buffer} from 'node:buffer';
 import process from 'node:process';
@@ -190,13 +190,18 @@ export class FileCache {
 		const entries = await fs.readdir(this.docsDir);
 		await Promise.all(entries.map(async entry => {
 			const entryPath = join(this.docsDir, entry);
+			// Skip the schema file - it should be preserved
 			if (entryPath === this.cacheSchemaPath) {
 				return;
 			}
 
 			try {
+				// Only attempt to delete files. unlink() will fail on directories,
+				// and those failures are caught and ignored (ENOENT or other errors).
+				// This preserves subdirectories like 'bundles' and 'cache-index.json'.
 				await fs.unlink(entryPath);
 			} catch (error) {
+				// Ignore if file doesn't exist or if it's a directory (EISDIR/EPERM)
 				if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') {
 					throw error;
 				}
@@ -205,7 +210,7 @@ export class FileCache {
 	}
 
 	private async readWithIntegrity(filePath: string): Promise<string | undefined> {
-		const fileName = filePath.split('/').pop() ?? filePath;
+		const fileName = basename(filePath);
 		const raw = await fs.readFile(filePath, 'utf8');
 		const hash = CacheIndex.createHash(raw);
 		const existing = this.cacheIndex.getEntry(fileName);
@@ -228,7 +233,7 @@ export class FileCache {
 	}
 
 	private async recordCacheEntry(filePath: string, payload: string): Promise<void> {
-		const fileName = filePath.split('/').pop() ?? filePath;
+		const fileName = basename(filePath);
 		const now = new Date().toISOString();
 
 		this.cacheIndex.setEntry({

@@ -11,6 +11,13 @@ export class AppleDevDocsClient {
         this.httpClient = new HttpClient();
         this.fileCache = new FileCache();
     }
+    async clearCache() {
+        await this.fileCache.clearAll();
+        this.httpClient.clearCache();
+    }
+    async checkHealth() {
+        return this.httpClient.checkHealth();
+    }
     async getFramework(frameworkName) {
         const cached = await this.fileCache.loadFramework(frameworkName);
         if (cached) {

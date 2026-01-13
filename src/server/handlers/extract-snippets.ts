@@ -7,14 +7,21 @@ type CodeSnippet = {
 	code: string;
 };
 
-const collectSnippets = (node: unknown, snippets: CodeSnippet[]) => {
+const collectSnippets = (node: unknown, snippets: CodeSnippet[], visited = new Set<unknown>()) => {
 	if (!node || typeof node !== 'object') {
 		return;
 	}
 
+	// Prevent circular references by tracking visited objects
+	if (visited.has(node)) {
+		return;
+	}
+
+	visited.add(node);
+
 	if (Array.isArray(node)) {
 		for (const item of node) {
-			collectSnippets(item, snippets);
+			collectSnippets(item, snippets, visited);
 		}
 
 		return;
@@ -31,7 +38,7 @@ const collectSnippets = (node: unknown, snippets: CodeSnippet[]) => {
 	}
 
 	for (const value of Object.values(record)) {
-		collectSnippets(value, snippets);
+		collectSnippets(value, snippets, visited);
 	}
 };
 
