@@ -42,6 +42,10 @@ export class ComprehensiveSymbolDownloader {
 		return 5;
 	}
 
+	private get maxRecursionDepth(): number {
+		return 4; // Maximum depth to prevent runaway downloads
+	}
+
 	getDownloadedCount(): number {
 		return this.downloadedSymbols.size;
 	}
@@ -159,7 +163,7 @@ export class ComprehensiveSymbolDownloader {
 		this.running = true;
 		try {
 			let currentDepth = depth;
-			while (this.pendingSymbols.length > 0 && currentDepth < 4) {
+			while (this.pendingSymbols.length > 0 && currentDepth < this.maxRecursionDepth) {
 				const batch = this.pendingSymbols.splice(0, this.maxConcurrency);
 				let processed = 0;
 				const totalToProcess = batch.length;
