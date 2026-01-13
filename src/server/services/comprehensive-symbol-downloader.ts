@@ -1,4 +1,3 @@
-/* eslint-disable max-depth */
 import {promises as fs} from 'node:fs';
 import {join, dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -42,10 +41,6 @@ export class ComprehensiveSymbolDownloader {
 		return 5;
 	}
 
-	private get maxRecursionDepth(): number {
-		return 4; // Maximum depth to prevent runaway downloads
-	}
-
 	getDownloadedCount(): number {
 		return this.downloadedSymbols.size;
 	}
@@ -56,11 +51,9 @@ export class ComprehensiveSymbolDownloader {
 
 	queuePriorityPaths(paths: string[]): void {
 		const normalized = paths.map(path => this.normalizeIdentifier(path));
-		const pendingSet = new Set(this.pendingSymbols);
 		for (const path of normalized.reverse()) {
-			if (!this.downloadedSymbols.has(path) && !pendingSet.has(path)) {
+			if (!this.downloadedSymbols.has(path) && !this.pendingSymbols.includes(path)) {
 				this.pendingSymbols.unshift(path);
-				pendingSet.add(path);
 			}
 		}
 	}
@@ -162,13 +155,12 @@ export class ComprehensiveSymbolDownloader {
 
 		this.running = true;
 		try {
-			let currentDepth = depth;
-			while (this.pendingSymbols.length > 0 && currentDepth < this.maxRecursionDepth) {
+			while (this.pendingSymbols.length > 0 && depth < 4) {
 				const batch = this.pendingSymbols.splice(0, this.maxConcurrency);
 				let processed = 0;
 				const totalToProcess = batch.length;
 
-				console.error(`📥 Processing ${totalToProcess} symbols (depth ${currentDepth})...`);
+				console.error(`📥 Processing ${totalToProcess} symbols (depth ${depth})...`);
 
 				// eslint-disable-next-line no-await-in-loop
 				const results = await Promise.all(batch.map(async identifier => {
@@ -206,9 +198,9 @@ export class ComprehensiveSymbolDownloader {
 				}
 
 				if (newIdentifiers.length > 0) {
-					console.error(`🔍 Found ${newIdentifiers.length} new identifiers to download (depth ${currentDepth + 1})`);
+					console.error(`🔍 Found ${newIdentifiers.length} new identifiers to download (depth ${depth + 1})`);
 					this.queueIdentifiers(newIdentifiers);
-					currentDepth += 1;
+					depth += 1;
 				}
 
 				// eslint-disable-next-line no-await-in-loop
@@ -216,7 +208,7 @@ export class ComprehensiveSymbolDownloader {
 			}
 
 			if (this.pendingSymbols.length > 0) {
-				console.error(`⚠️ Pausing recursion at depth ${currentDepth} to prevent runaway downloads`);
+				console.error(`⚠️ Pausing recursion at depth ${depth} to prevent runaway downloads`);
 			}
 		} finally {
 			this.running = false;
@@ -225,12 +217,10 @@ export class ComprehensiveSymbolDownloader {
 	}
 
 	private queueIdentifiers(identifiers: string[]): void {
-		const pendingSet = new Set(this.pendingSymbols);
 		for (const id of identifiers) {
 			const normalized = this.normalizeIdentifier(id);
-			if (!this.downloadedSymbols.has(normalized) && !pendingSet.has(normalized)) {
+			if (!this.downloadedSymbols.has(normalized) && !this.pendingSymbols.includes(normalized)) {
 				this.pendingSymbols.push(normalized);
-				pendingSet.add(normalized);
 			}
 		}
 	}
