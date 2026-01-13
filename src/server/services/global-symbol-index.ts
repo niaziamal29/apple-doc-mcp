@@ -57,12 +57,14 @@ export class GlobalSymbolIndex {
 				continue;
 			}
 
-			if (!this.validateIntegrity(filePath, file)) {
+			// eslint-disable-next-line no-await-in-loop
+			if (!await this.validateIntegrity(filePath, file)) {
 				continue;
 			}
 
 			try {
-				const rawData = readFileSync(filePath, 'utf8');
+				// eslint-disable-next-line no-await-in-loop
+				const rawData = await fs.readFile(filePath, 'utf8');
 				const data = JSON.parse(rawData) as SymbolData | FrameworkData;
 				if (!this.isValidCacheData(data)) {
 					continue;
@@ -227,12 +229,20 @@ export class GlobalSymbolIndex {
 		}
 	}
 
-	private validateIntegrity(filePath: string, fileName: string): boolean {
-		const rawData = readFileSync(filePath, 'utf8');
+	private async validateIntegrity(filePath: string, fileName: string): Promise<boolean> {
+		const rawData = await fs.readFile(filePath, 'utf8');
 		const hash = CacheIndex.createHash(rawData);
 		const entry = this.cacheIndex.getEntry(fileName);
 		if (entry && entry.hash !== hash) {
 			console.warn(`Cache hash mismatch for ${fileName}, skipping`);
+			try {
+				await fs.unlink(filePath);
+			} catch (error) {
+				if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+					console.warn(`Failed to remove corrupt cache file ${fileName}:`, error instanceof Error ? error.message : String(error));
+				}
+			}
+
 			this.cacheIndex.removeEntry(fileName);
 			return false;
 		}
@@ -246,7 +256,7 @@ export class GlobalSymbolIndex {
 			lastAccessedAt: now,
 			updatedAt: entry?.updatedAt ?? now,
 		});
-		void this.cacheIndex.persist();
+		await this.cacheIndex.persist();
 		return true;
 	}
 }

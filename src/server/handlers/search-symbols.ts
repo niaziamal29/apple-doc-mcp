@@ -36,6 +36,7 @@ export const buildSearchSymbolsHandler = (context: ServerContext) => {
 
 		const {query, maxResults = 20, platform, symbolType, scope = 'technology'} = args;
 		const startTime = Date.now();
+		const provider = state.getProvider();
 
 		// Get or create technology-specific local index from state
 		const techLocalIndex = state.getLocalSymbolIndex(client);
@@ -198,7 +199,7 @@ export const buildSearchSymbolsHandler = (context: ServerContext) => {
 				const fallbackPath = frameworkName ? `documentation/${frameworkName}/${query}` : query;
 
 				try {
-					const fallbackData = await client.getSymbol(fallbackPath);
+					const fallbackData = await provider.getSymbol(fallbackPath);
 					const fallbackEntry = {
 						id: fallbackPath,
 						title: fallbackData.metadata?.title ?? query,

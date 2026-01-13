@@ -1,4 +1,4 @@
-import {promises as fs, readFileSync, existsSync, readdirSync, unlinkSync} from 'node:fs';
+import {existsSync, readdirSync, promises as fs} from 'node:fs';
 import {join, dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {Buffer} from 'node:buffer';
