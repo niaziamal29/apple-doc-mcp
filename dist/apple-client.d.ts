@@ -9,6 +9,12 @@ export declare class AppleDevDocsClient {
     private readonly httpClient;
     private readonly fileCache;
     constructor();
+    clearCache(): Promise<void>;
+    checkHealth(): Promise<{
+        ok: boolean;
+        latencyMs: number;
+        message?: string;
+    }>;
     getFramework(frameworkName: string): Promise<FrameworkData>;
     refreshFramework(frameworkName: string): Promise<FrameworkData>;
     getSymbol(path: string): Promise<SymbolData>;

@@ -24,7 +24,8 @@ const ensureFramework = (technology) => {
 };
 export const buildChooseTechnologyHandler = ({ client, state }) => async (args) => {
     const { name, identifier } = args;
-    const technologies = await client.getTechnologies();
+    const provider = state.getProvider();
+    const technologies = await provider.getTechnologies();
     const candidates = Object.values(technologies).filter(tech => typeof tech?.title === 'string' && typeof tech?.identifier === 'string');
     // Normalize search terms - case insensitive
     const normalizedName = name?.toLowerCase().trim();

@@ -1,3 +1,4 @@
+/* eslint-disable complexity */
 import type {ServerContext, ToolResponse} from '../context.js';
 import {header, bold} from '../markdown.js';
 import {buildNoTechnologyMessage} from './no-technology.js';
@@ -35,6 +36,7 @@ export const buildSearchSymbolsHandler = (context: ServerContext) => {
 
 		const {query, maxResults = 20, platform, symbolType, scope = 'technology'} = args;
 		const startTime = Date.now();
+		const provider = state.getProvider();
 
 		// Get or create technology-specific local index from state
 		const techLocalIndex = state.getLocalSymbolIndex(client);
@@ -84,7 +86,7 @@ export const buildSearchSymbolsHandler = (context: ServerContext) => {
 
 			// Fallback: search framework.references directly (fast, no download needed)
 			console.error('📋 Using framework references for search...');
-			const frameworkResults = await client.searchFramework(activeTechnology.title, query, {maxResults: maxResults * 2, platform, symbolType});
+			const frameworkResults = await provider.searchFramework(activeTechnology.title, query, {maxResults: maxResults * 2, platform, symbolType});
 			symbolResults = frameworkResults.map(r => ({
 				id: r.path ?? r.title,
 				title: r.title,
@@ -197,7 +199,7 @@ export const buildSearchSymbolsHandler = (context: ServerContext) => {
 				const fallbackPath = frameworkName ? `documentation/${frameworkName}/${query}` : query;
 
 				try {
-					const fallbackData = await client.getSymbol(fallbackPath);
+					const fallbackData = await provider.getSymbol(fallbackPath);
 					const fallbackEntry = {
 						id: fallbackPath,
 						title: fallbackData.metadata?.title ?? query,
@@ -254,3 +256,4 @@ export const buildSearchSymbolsHandler = (context: ServerContext) => {
 		};
 	};
 };
+/* eslint-enable complexity */
