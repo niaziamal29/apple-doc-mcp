@@ -1,5 +1,9 @@
 import type { FrameworkData, ReferenceData, Technology, AppleDevDocsClient } from '../apple-client.js';
 import { LocalSymbolIndex } from './services/local-symbol-index.js';
+import { ComprehensiveSymbolDownloader } from './services/comprehensive-symbol-downloader.js';
+import { Telemetry } from './services/telemetry.js';
+import { GlobalSymbolIndex } from './services/global-symbol-index.js';
+import type { ProviderRegistry, DocProvider } from './services/doc-provider.js';
 export type LastDiscovery = {
     query?: string;
     results: Technology[];
@@ -10,12 +14,19 @@ export type FrameworkIndexEntry = {
     tokens: string[];
 };
 export declare class ServerState {
+    private readonly providerRegistry;
     private activeTechnology?;
     private activeFrameworkData?;
     private frameworkIndex?;
     private readonly expandedIdentifiers;
     private lastDiscovery?;
     private localSymbolIndex?;
+    private comprehensiveDownloader?;
+    private comprehensiveDownloadPromise?;
+    private telemetry?;
+    private globalSymbolIndex?;
+    private activeProviderName;
+    constructor(providerRegistry: ProviderRegistry, activeProviderName?: string);
     getActiveTechnology(): Technology | undefined;
     setActiveTechnology(technology: Technology | undefined): void;
     getActiveFrameworkData(): FrameworkData | undefined;
@@ -30,5 +41,15 @@ export declare class ServerState {
     setLastDiscovery(lastDiscovery: LastDiscovery | undefined): void;
     getLocalSymbolIndex(client: AppleDevDocsClient): LocalSymbolIndex;
     clearLocalSymbolIndex(): void;
+    getGlobalSymbolIndex(client: AppleDevDocsClient): GlobalSymbolIndex;
+    clearGlobalSymbolIndex(): void;
+    getProvider(): DocProvider;
+    listProviders(): string[];
+    getProviders(): DocProvider[];
+    setProvider(name: string): void;
+    getComprehensiveDownloader(client: AppleDevDocsClient): ComprehensiveSymbolDownloader;
+    isComprehensiveDownloadRunning(): boolean;
+    startComprehensiveDownload(promise: Promise<void>): void;
+    getTelemetry(): Telemetry;
     private resetIndexForNewTechnology;
 }

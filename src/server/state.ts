@@ -156,6 +156,8 @@ export class ServerState {
 		this.comprehensiveDownloadPromise = (async () => {
 			try {
 				await promise;
+			} catch (error) {
+				console.error('Comprehensive download failed:', error instanceof Error ? error.message : String(error));
 			} finally {
 				this.comprehensiveDownloadPromise = undefined;
 			}
