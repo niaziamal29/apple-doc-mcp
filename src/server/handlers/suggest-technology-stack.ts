@@ -1,5 +1,10 @@
 import type {ServerContext, ToolResponse} from '../context.js';
-import {bold, header, list, paragraph} from '../markdown.js';
+import {
+	bold,
+	header,
+	list,
+	paragraph,
+} from '../markdown.js';
 
 const featureToFrameworks: Record<string, string[]> = {
 	ui: ['SwiftUI', 'UIKit'],
@@ -29,7 +34,7 @@ const featureToFrameworks: Record<string, string[]> = {
 	widgets: ['WidgetKit'],
 };
 
-const normalize = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]+/g, '');
+const normalize = (value: string): string => value.toLowerCase().replaceAll(/[^a-z\d]+/g, '');
 
 const tokenize = (value: string): string[] => value
 	.toLowerCase()
@@ -79,7 +84,7 @@ const resolveFrameworks = (
 	return results;
 };
 
-export const buildSuggestTechnologyStackHandler = ({client}: ServerContext) =>
+export const buildSuggestTechnologyStackHandler = ({client, state}: ServerContext) =>
 	async (args: {description?: string}): Promise<ToolResponse> => {
 		const description = args.description?.trim() ?? '';
 		if (!description) {
@@ -102,7 +107,7 @@ export const buildSuggestTechnologyStackHandler = ({client}: ServerContext) =>
 			};
 		}
 
-		const technologies = await client.getTechnologies();
+		const technologies = await state.getProvider().getTechnologies();
 		const availableTitles = new Map<string, string>();
 		for (const tech of Object.values(technologies)) {
 			if (tech.title) {

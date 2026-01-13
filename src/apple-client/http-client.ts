@@ -40,6 +40,20 @@ export class HttpClient {
 		}
 	}
 
+	async checkHealth(): Promise<{ok: boolean; latencyMs: number; message?: string}> {
+		const start = Date.now();
+		try {
+			await this.makeRequest('documentation/technologies');
+			return {ok: true, latencyMs: Date.now() - start};
+		} catch (error) {
+			return {
+				ok: false,
+				latencyMs: Date.now() - start,
+				message: error instanceof Error ? error.message : String(error),
+			};
+		}
+	}
+
 	async getDocumentation<T>(path: string): Promise<T> {
 		return this.makeRequest<T>(`${path}.json`);
 	}
